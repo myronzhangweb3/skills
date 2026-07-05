@@ -3,17 +3,15 @@
 """
 区块链新闻抓取脚本（独立版）
 
-只依赖 requests，抓取三路数据源的原始新闻，按 JSON 输出到标准输出：
-  1. KOL 推文        （Blockexpress article_list）
-  2. 媒体快讯        （Bitpush live_news）
-  3. AI 日报         （AICPB dailyReports）
+只依赖 requests，抓取两路数据源的原始新闻，按 JSON 输出到标准输出：
+  1. KOL 推文   （Blockexpress article_list）
+  2. 媒体快讯   （Bitpush live_news）
 
 不做 LLM 总结，不发邮件。总结与排版由调用方（阅读 SKILL.md 的助手）完成。
 
 用法：
     python fetch_news.py                 # 默认回溯 12 小时
     python fetch_news.py --hours 24      # 回溯 24 小时
-    python fetch_news.py --date 2026-07-05   # 指定 AI 日报日期
 """
 
 import argparse
@@ -26,7 +24,6 @@ import requests
 
 KOL_URL = "https://d3qx0f55wsubto.cloudfront.net/api/xplugin/article_list"
 MEDIA_URL = "https://terminal-en.bitpush.news/api/news/live_news"
-AI_URL = "https://www.aicpb.com/api/dailyReports/get"
 HEADERS = {
     "accept": "application/json, text/plain, */*",
     "User-Agent": "Mozilla/5.0 (compatible; blockchain-news-skill/1.0)",
@@ -92,29 +89,17 @@ def fetch_media(time_limit):
     return items
 
 
-def fetch_ai_news(date_str):
-    """抓取当日 AI 日报（标题 + 链接）。"""
-    resp = requests.get(AI_URL, params={"date": date_str}, headers=HEADERS, timeout=30)
-    data = resp.json()
-    news = data.get("data", {}).get("news") or []
-    return [{"title": n["title"], "link": n.get("link") or ""} for n in news]
-
-
 def main():
     parser = argparse.ArgumentParser(description="抓取区块链新闻原始数据")
     parser.add_argument("--hours", type=int, default=12, help="回溯小时数，默认 12")
-    parser.add_argument("--date", type=str, default=None,
-                        help="AI 日报日期 YYYY-MM-DD，默认今天")
     args = parser.parse_args()
 
     time_limit = datetime.now() - timedelta(hours=args.hours)
-    date_str = args.date or datetime.now().strftime("%Y-%m-%d")
 
-    result = {"kol": [], "media": [], "ai_news": [], "errors": {}}
+    result = {"kol": [], "media": [], "errors": {}}
 
     for key, fn in (("kol", lambda: fetch_kol(time_limit)),
-                    ("media", lambda: fetch_media(time_limit)),
-                    ("ai_news", lambda: fetch_ai_news(date_str))):
+                    ("media", lambda: fetch_media(time_limit))):
         try:
             result[key] = fn()
         except Exception as e:  # 单路失败不影响其它数据源
